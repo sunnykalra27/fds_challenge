@@ -320,8 +320,7 @@ def learn_type_effectiveness(battles, min_battles=5):
                 eff[a][d] = max(0.5, min(1.5, 0.5 + win_rate)) 
     return eff
 
-TYPE_EFF = learn_type_effectiveness(train_data)
-print("Learned type effectiveness from train_data.")
+
 
 def type_matchup_score(attacker_types, defender_types, eff_table):
     if not attacker_types or not defender_types:
