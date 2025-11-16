@@ -155,3 +155,113 @@ def create_features(data: list[dict]) -> pd.DataFrame:
         feature_list.append(f)
 
     return pd.DataFrame(feature_list).fillna(0)
+
+BASIC_STATS = ["hp","atk","def","spa","spd","spe"]
+
+def build_features(battles):
+    rows = []
+
+    for battle in battles:
+        features = {}
+
+        me_team = battle.get("p1_team_details", []) or []
+        if me_team:
+            for stat in BASIC_STATS:
+                values = [p.get(f"base_{stat}", 0) for p in me_team]
+                features[f"me_average_{stat}"] = float(np.mean(values))
+                features[f"me_total_{stat}"] = float(np.sum(values))
+                features[f"me_maximum_{stat}"] = float(np.max(values))
+
+            features["me_fast_pokemon_count"] = int(sum(p.get("base_spe",0) >= 100 for p in me_team))
+            features["me_high_hp_pokemon_count"] = int(sum(p.get("base_hp",0) >= 90 for p in me_team))
+            features["me_high_special_attack_pokemon_count"] = int(sum(p.get("base_spa",0) >= 110 for p in me_team))
+        else:
+            for stat in BASIC_STATS:
+                for agg in ["average","total","maximum"]:
+                    features[f"me_{agg}_{stat}"] = 0.0
+            features["me_fast_pokemon_count"] = 0
+            features["me_high_hp_pokemon_count"] = 0
+            features["me_high_special_attack_pokemon_count"] = 0
+
+        opponent_lead = battle.get("p2_lead_details", {}) or {}
+        for stat in BASIC_STATS:
+            features[f"opponent_{stat}"] = float(opponent_lead.get(f"base_{stat}", 0))
+
+        for stat in BASIC_STATS:
+            features[f"average_{stat}_difference"] = (features.get(f"me_average_{stat}", 0.0) - features.get(f"opponent_{stat}", 0.0))
+
+        timeline = (battle.get("battle_timeline", []) or [])[:30]
+
+        me_total_damage_done = 0.0
+        opponent_total_damage_done = 0.0
+        me_attack_move_count = me_status_move_count = 0
+        opponent_attack_move_count = opponent_status_move_count = 0
+        me_hp_series, opponent_hp_series = [], []
+        previous_me_hp = previous_opponent_hp = None
+
+        for event in timeline:
+            me_state = event.get("p1_pokemon_state", {}) or {}
+            opponent_state = event.get("p2_pokemon_state", {}) or {}
+
+            me_hp = me_state.get("hp_pct")
+            opponent_hp = opponent_state.get("hp_pct")
+
+            if me_hp is not None: me_hp_series.append(me_hp)
+            if opponent_hp is not None: opponent_hp_series.append(opponent_hp)
+
+            if previous_me_hp is not None and me_hp is not None:
+                drop = previous_me_hp - me_hp
+                if drop > 0:
+                    opponent_total_damage_done += drop
+            if previous_opponent_hp is not None and opponent_hp is not None:
+                drop = previous_opponent_hp - opponent_hp
+                if drop > 0:
+                    me_total_damage_done += drop
+
+            if me_hp is not None: previous_me_hp = me_hp
+            if opponent_hp is not None: previous_opponent_hp = opponent_hp
+
+            me_move = event.get("p1_move_details") or {}
+            opponent_move = event.get("p2_move_details") or {}
+
+            if me_move:
+                if me_move.get("category") == "STATUS":
+                    me_status_move_count += 1
+                else:
+                    me_attack_move_count += 1
+            if opponent_move:
+                if opponent_move.get("category") == "STATUS":
+                    opponent_status_move_count += 1
+                else:
+                    opponent_attack_move_count += 1
+
+        features["me_total_damage_done"] = me_total_damage_done
+        features["opponent_total_damage_done"] = opponent_total_damage_done
+        features["me_damage_difference"] = me_total_damage_done - opponent_total_damage_done
+
+        if me_hp_series:
+            features["me_min_hp_percent"] = float(min(me_hp_series))
+            features["me_average_hp_percent"] = float(np.mean(me_hp_series))
+        else:
+            features["me_min_hp_percent"] = 1.0
+            features["me_average_hp_percent"] = 1.0
+
+        if opponent_hp_series:
+            features["opponent_min_hp_percent"] = float(min(opponent_hp_series))
+            features["opponent_average_hp_percent"] = float(np.mean(opponent_hp_series))
+        else:
+            features["opponent_min_hp_percent"] = 1.0
+            features["opponent_average_hp_percent"] = 1.0
+
+        features["me_attack_move_count"] = me_attack_move_count
+        features["me_status_move_count"] = me_status_move_count
+        features["opponent_attack_move_count"] = opponent_attack_move_count
+        features["opponent_status_move_count"] = opponent_status_move_count
+
+        features["battle_id"] = battle.get("battle_id")
+        if "player_won" in battle:
+            features["player_won"] = int(battle["player_won"])
+
+        rows.append(features)
+
+    return pd.DataFrame(rows).fillna(0.0) #make Nan ==0
