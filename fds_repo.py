@@ -420,7 +420,7 @@ def summarize_timeline_30(battle, max_turns=30):
         "hp_diff_mean": (float(np.mean(p1_hp)) - float(np.mean(p2_hp))) if (p1_hp and p2_hp) else 0.0}
     return out
 
-def build_enhanced_features(battles):
+def build_enhanced_features(battles, TYPE_EFF):
     rows = []
 
     for b in battles:
