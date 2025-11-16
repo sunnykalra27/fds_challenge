@@ -1,3 +1,4 @@
+import pandas as pd
 TYPE_CHART = {
     'fire': {'grass': 2, 'water': 0.5, 'rock': 0.5, 'ice': 2},
     'water': {'fire': 2, 'grass': 0.5, 'rock': 2, 'ground': 2},
